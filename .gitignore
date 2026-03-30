@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+.env
+
+# Local runtime data
+data/*.db
+data/*.sqlite3
+data/keys.json
+data/*.json
+
+# VS Code
+.vscode/
