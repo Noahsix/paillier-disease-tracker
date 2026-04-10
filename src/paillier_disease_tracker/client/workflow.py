@@ -18,6 +18,34 @@ class CountResult:
     plain_reference: int
 
 
+@dataclass
+class CountSumResult:
+    disease: str
+    encrypted_count: int
+    encrypted_sum: int
+    decrypted_count: int
+    decrypted_sum: int
+    plain_count_reference: int
+    plain_sum_reference: int
+    row_count: int
+
+
+@dataclass
+class FlowRow:
+    pseudonym: str
+    plain_value: int
+    ciphertext: int
+
+
+@dataclass
+class DiseaseCountFlow:
+    disease: str
+    rows: list[FlowRow]
+    encrypted_homomorphic_result: int
+    decrypted_result: int
+    plain_reference: int
+
+
 class ClientApplication:
     def __init__(
         self,
@@ -64,14 +92,53 @@ class ClientApplication:
         return added
 
     def count_disease(self, disease_name: str) -> CountResult:
-        encrypted_result = self.server.encrypted_count_for_disease(disease_name)
-        decrypted_result = self.decrypt_value(encrypted_result)
-        plain_reference = self.repository.get_plain_count_for_disease(disease_name)
+        count_sum = self.count_and_sum_disease(disease_name)
         return CountResult(
             disease=disease_name,
-            encrypted_result=encrypted_result,
-            decrypted_result=decrypted_result,
-            plain_reference=plain_reference,
+            encrypted_result=count_sum.encrypted_count,
+            decrypted_result=count_sum.decrypted_count,
+            plain_reference=count_sum.plain_count_reference,
+        )
+
+    def count_and_sum_disease(self, disease_name: str) -> CountSumResult:
+        encrypted_count_sum = self.server.encrypted_count_sum_for_disease(disease_name)
+
+        decrypted_count = self.decrypt_value(encrypted_count_sum.encrypted_count)
+        decrypted_sum = self.decrypt_value(encrypted_count_sum.encrypted_sum)
+
+        plain_sum_reference = self.repository.get_plain_sum_for_disease(disease_name)
+        plain_count_reference = plain_sum_reference
+
+        return CountSumResult(
+            disease=disease_name,
+            encrypted_count=encrypted_count_sum.encrypted_count,
+            encrypted_sum=encrypted_count_sum.encrypted_sum,
+            decrypted_count=decrypted_count,
+            decrypted_sum=decrypted_sum,
+            plain_count_reference=plain_count_reference,
+            plain_sum_reference=plain_sum_reference,
+            row_count=encrypted_count_sum.row_count,
+        )
+
+    def build_count_flow(self, disease_name: str) -> DiseaseCountFlow:
+        count_sum = self.count_and_sum_disease(disease_name)
+        rows = [
+            FlowRow(
+                pseudonym=pseudonym,
+                plain_value=plain_value,
+                ciphertext=ciphertext,
+            )
+            for pseudonym, plain_value, ciphertext in self.repository.get_plain_and_encrypted_rows_for_disease(
+                disease_name
+            )
+        ]
+
+        return DiseaseCountFlow(
+            disease=disease_name,
+            rows=rows,
+            encrypted_homomorphic_result=count_sum.encrypted_sum,
+            decrypted_result=count_sum.decrypted_sum,
+            plain_reference=count_sum.plain_sum_reference,
         )
 
     def list_diseases(self) -> list[str]:

@@ -4,7 +4,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from ..client import ClientApplication
+from ..client import ClientApplication, DiseaseCountFlow
 from ..config import DEFAULT_DB_PATH, DEFAULT_DISEASES, DEFAULT_KEY_SIZE, DEFAULT_KEYS_PATH
 from ..crypto import generate_keypair
 from ..keys import load_keypair, save_keypair
@@ -13,8 +13,8 @@ from ..keys import load_keypair, save_keypair
 class TrackerGUI:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("Paillier Disease Tracker GUI (wstepny)")
-        self.root.geometry("980x680")
+        self.root.title("Paillier Disease Tracker GUI")
+        self.root.geometry("1080x760")
 
         self.app: ClientApplication | None = None
         self.diagnosis_vars: dict[str, tk.IntVar] = {}
@@ -24,6 +24,10 @@ class TrackerGUI:
         self.key_size_var = tk.StringVar(value=str(DEFAULT_KEY_SIZE))
         self.patient_name_var = tk.StringVar(value="")
         self.selected_disease_var = tk.StringVar(value=DEFAULT_DISEASES[0])
+        self.process_plain_var = tk.StringVar(value="dane jawne: -")
+        self.process_cipher_var = tk.StringVar(value="szyfrogram: -")
+        self.process_homomorphic_var = tk.StringVar(value="wynik homomorficzny: -")
+        self.process_decrypted_var = tk.StringVar(value="odszyfrowany wynik: -")
 
         self._build_layout()
         self._refresh_diagnosis_controls(list(DEFAULT_DISEASES))
@@ -94,9 +98,48 @@ class TrackerGUI:
         )
         ttk.Button(
             analytics_frame,
-            text="Count + show ciphertexts",
+            text="Count + show flow details",
             command=self.on_count_with_rows,
         ).grid(row=0, column=3, padx=6)
+
+        process_frame = ttk.LabelFrame(
+            container,
+            text="Wizualizacja procesu: dane jawne -> szyfrogram -> wynik homomorficzny -> odszyfrowany wynik",
+            padding=10,
+        )
+        process_frame.pack(fill=tk.BOTH, pady=(10, 0))
+
+        ttk.Label(process_frame, textvariable=self.process_plain_var).grid(
+            row=0, column=0, sticky=tk.W
+        )
+        ttk.Label(process_frame, textvariable=self.process_cipher_var).grid(
+            row=1, column=0, sticky=tk.W, pady=(2, 0)
+        )
+        ttk.Label(process_frame, textvariable=self.process_homomorphic_var).grid(
+            row=2, column=0, sticky=tk.W, pady=(2, 0)
+        )
+        ttk.Label(process_frame, textvariable=self.process_decrypted_var).grid(
+            row=3, column=0, sticky=tk.W, pady=(2, 8)
+        )
+
+        columns = ("pseudonym", "plain", "ciphertext")
+        self.process_tree = ttk.Treeview(process_frame, columns=columns, show="headings", height=8)
+        self.process_tree.heading("pseudonym", text="Pseudonym")
+        self.process_tree.heading("plain", text="Dane jawne (0/1)")
+        self.process_tree.heading("ciphertext", text="Szyfrogram")
+        self.process_tree.column("pseudonym", width=220, anchor=tk.W)
+        self.process_tree.column("plain", width=140, anchor=tk.CENTER)
+        self.process_tree.column("ciphertext", width=650, anchor=tk.W)
+        self.process_tree.grid(row=4, column=0, sticky="nsew")
+
+        process_scrollbar = ttk.Scrollbar(
+            process_frame,
+            orient=tk.VERTICAL,
+            command=self.process_tree.yview,
+        )
+        process_scrollbar.grid(row=4, column=1, sticky="ns")
+        self.process_tree.configure(yscrollcommand=process_scrollbar.set)
+        process_frame.grid_columnconfigure(0, weight=1)
 
         log_frame = ttk.LabelFrame(container, text="Log", padding=10)
         log_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
@@ -111,6 +154,41 @@ class TrackerGUI:
     def _log(self, message: str) -> None:
         self.log_widget.insert(tk.END, f"{message}\n")
         self.log_widget.see(tk.END)
+
+    def _compact_series(self, values: list[int], max_items: int = 4) -> str:
+        if not values:
+            return "-"
+        if len(values) <= max_items:
+            return ", ".join(str(item) for item in values)
+        preview = ", ".join(str(item) for item in values[:max_items])
+        return f"{preview}, ... (total={len(values)})"
+
+    def _render_flow(self, flow: DiseaseCountFlow) -> None:
+        for item_id in self.process_tree.get_children():
+            self.process_tree.delete(item_id)
+
+        plain_values = [row.plain_value for row in flow.rows]
+        ciphertexts = [row.ciphertext for row in flow.rows]
+
+        self.process_plain_var.set(f"dane jawne: {self._compact_series(plain_values)}")
+        self.process_cipher_var.set(f"szyfrogram: {self._compact_series(ciphertexts)}")
+        self.process_homomorphic_var.set(
+            f"wynik homomorficzny: {flow.encrypted_homomorphic_result}"
+        )
+        self.process_decrypted_var.set(
+            f"odszyfrowany wynik: {flow.decrypted_result} (plain reference={flow.plain_reference})"
+        )
+
+        if not flow.rows:
+            self.process_tree.insert("", tk.END, values=("<brak rekordow>", "-", "-"))
+            return
+
+        for row in flow.rows:
+            self.process_tree.insert(
+                "",
+                tk.END,
+                values=(row.pseudonym, row.plain_value, row.ciphertext),
+            )
 
     def _refresh_diagnosis_controls(self, disease_names: list[str]) -> None:
         for child in self.diagnoses_frame.winfo_children():
@@ -221,24 +299,30 @@ class TrackerGUI:
             if not disease_name:
                 raise ValueError("Choose disease first")
 
-            result = app.count_disease(disease_name)
+            result = app.count_and_sum_disease(disease_name)
+            flow = app.build_count_flow(disease_name)
+            self._render_flow(flow)
+
             self._log(
                 " | ".join(
                     [
                         f"Disease={result.disease}",
-                        f"Encrypted aggregate={result.encrypted_result}",
-                        f"Decrypted result={result.decrypted_result}",
-                        f"Plain reference={result.plain_reference}",
-                        f"Validation={result.decrypted_result == result.plain_reference}",
+                        f"Rows={result.row_count}",
+                        f"Encrypted COUNT={result.encrypted_count}",
+                        f"Encrypted SUM={result.encrypted_sum}",
+                        f"Decrypted COUNT={result.decrypted_count}",
+                        f"Decrypted SUM={result.decrypted_sum}",
+                        f"Plain COUNT ref={result.plain_count_reference}",
+                        f"Plain SUM ref={result.plain_sum_reference}",
+                        f"Validation={result.decrypted_count == result.plain_count_reference and result.decrypted_sum == result.plain_sum_reference}",
                     ]
                 )
             )
 
             if show_rows:
-                rows = app.repository.get_encrypted_rows_for_disease(disease_name)
-                self._log(f"Ciphertexts for {disease_name}:")
-                for pseudonym, ciphertext in rows:
-                    self._log(f"  {pseudonym}: {ciphertext}")
+                self._log(f"Flow rows for {disease_name}: plain -> ciphertext")
+                for row in flow.rows:
+                    self._log(f"  {row.pseudonym}: {row.plain_value} -> {row.ciphertext}")
         except Exception as error:
             self._log(f"ERROR count: {error}")
             messagebox.showerror("Count error", str(error))

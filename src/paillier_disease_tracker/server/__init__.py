@@ -1,3 +1,3 @@
-from .cloud_service import CloudAnalyticsService
+from .cloud_service import CloudAnalyticsService, EncryptedCountSum
 
-__all__ = ["CloudAnalyticsService"]
+__all__ = ["CloudAnalyticsService", "EncryptedCountSum"]

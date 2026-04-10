@@ -111,7 +111,31 @@ class DiseaseRepository:
             ).fetchall()
             return [(str(pseudonym), int(ciphertext)) for pseudonym, ciphertext in rows]
 
+    def get_plain_and_encrypted_rows_for_disease(
+        self,
+        disease_name: str,
+    ) -> list[tuple[str, int, int]]:
+        with connect(self.db_path) as connection:
+            rows = connection.execute(
+                """
+                SELECT p.pseudonym, dg.has_disease, dg.encrypted_flag
+                FROM diagnoses dg
+                JOIN diseases d ON d.id = dg.disease_id
+                JOIN patients p ON p.id = dg.patient_id
+                WHERE d.name = ?
+                ORDER BY p.id
+                """,
+                (disease_name,),
+            ).fetchall()
+            return [
+                (str(pseudonym), int(plain_value), int(ciphertext))
+                for pseudonym, plain_value, ciphertext in rows
+            ]
+
     def get_plain_count_for_disease(self, disease_name: str) -> int:
+        return self.get_plain_sum_for_disease(disease_name)
+
+    def get_plain_sum_for_disease(self, disease_name: str) -> int:
         with connect(self.db_path) as connection:
             row = connection.execute(
                 """

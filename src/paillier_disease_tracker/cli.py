@@ -81,18 +81,28 @@ def command_count(args: argparse.Namespace) -> int:
     if args.disease not in app.list_diseases():
         raise ValueError(f"Unknown disease: {args.disease}")
 
-    result = app.count_disease(args.disease)
+    result = app.count_and_sum_disease(args.disease)
     print(f"Disease: {result.disease}")
-    print(f"Encrypted aggregate (server-side): {result.encrypted_result}")
-    print(f"Decrypted result (client-side): {result.decrypted_result}")
-    print(f"Plain reference from DB: {result.plain_reference}")
-    print(f"Validation status: {result.decrypted_result == result.plain_reference}")
+    print(f"Rows considered by server: {result.row_count}")
+    print(f"Encrypted COUNT (server-side): {result.encrypted_count}")
+    print(f"Encrypted SUM (server-side): {result.encrypted_sum}")
+    print(f"Decrypted COUNT (client-side): {result.decrypted_count}")
+    print(f"Decrypted SUM (client-side): {result.decrypted_sum}")
+    print(f"Plain COUNT reference from DB: {result.plain_count_reference}")
+    print(f"Plain SUM reference from DB: {result.plain_sum_reference}")
+    print(
+        "Validation status: "
+        f"{result.decrypted_count == result.plain_count_reference and result.decrypted_sum == result.plain_sum_reference}"
+    )
 
     if args.show_steps:
-        rows = app.repository.get_encrypted_rows_for_disease(args.disease)
-        print("Ciphertexts by patient:")
-        for pseudonym, ciphertext in rows:
-            print(f"  {pseudonym}: {ciphertext}")
+        flow = app.build_count_flow(args.disease)
+        print("Process visualization: plain -> ciphertext -> homomorphic -> decrypted")
+        for row in flow.rows:
+            print(f"  {row.pseudonym}: {row.plain_value} -> {row.ciphertext}")
+        print(f"  Homomorphic aggregate ciphertext: {flow.encrypted_homomorphic_result}")
+        print(f"  Decrypted final result: {flow.decrypted_result}")
+        print(f"  Plain reference: {flow.plain_reference}")
 
     return 0
 
@@ -140,7 +150,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     count_parser = subparsers.add_parser(
         "count",
-        help="Compute encrypted count on server and decrypt result on client",
+        help="Compute encrypted COUNT/SUM on server and decrypt result on client",
     )
     count_parser.add_argument("--disease", required=True)
     count_parser.add_argument("--show-steps", action="store_true")

@@ -1,3 +1,5 @@
+import pytest
+
 from paillier_disease_tracker.crypto import (
     decrypt,
     encrypt,
@@ -36,3 +38,58 @@ def test_homomorphic_add_many_and_mul_const() -> None:
 
     encrypted_scaled = homomorphic_mul_const(public_key, encrypted_count, 4)
     assert decrypt(public_key, private_key, encrypted_scaled) == 12
+
+
+def test_homomorphic_add_many_empty_collection_returns_zero() -> None:
+    public_key, private_key = generate_keypair(128)
+
+    encrypted_sum = homomorphic_add_many(public_key, [])
+
+    assert decrypt(public_key, private_key, encrypted_sum) == 0
+
+
+def test_homomorphic_mul_const_with_zero_returns_zero() -> None:
+    public_key, private_key = generate_keypair(128)
+
+    ciphertext = encrypt(public_key, 17)
+    encrypted_zero = homomorphic_mul_const(public_key, ciphertext, 0)
+
+    assert decrypt(public_key, private_key, encrypted_zero) == 0
+
+
+def test_homomorphic_mul_const_rejects_negative_constant() -> None:
+    public_key, _ = generate_keypair(128)
+    ciphertext = encrypt(public_key, 1)
+
+    with pytest.raises(ValueError, match="non-negative"):
+        homomorphic_mul_const(public_key, ciphertext, -1)
+
+
+def test_encrypt_rejects_invalid_plaintext_range() -> None:
+    public_key, _ = generate_keypair(128)
+
+    with pytest.raises(ValueError, match="range"):
+        encrypt(public_key, -1)
+
+    with pytest.raises(ValueError, match="range"):
+        encrypt(public_key, public_key.n)
+
+
+def test_encrypt_rejects_invalid_randomizer() -> None:
+    public_key, _ = generate_keypair(128)
+
+    with pytest.raises(ValueError, match="gcd"):
+        encrypt(public_key, 1, r=0)
+
+    with pytest.raises(ValueError, match="gcd"):
+        encrypt(public_key, 1, r=public_key.n)
+
+
+def test_decrypt_rejects_out_of_range_ciphertext() -> None:
+    public_key, private_key = generate_keypair(128)
+
+    with pytest.raises(ValueError, match="range"):
+        decrypt(public_key, private_key, -1)
+
+    with pytest.raises(ValueError, match="range"):
+        decrypt(public_key, private_key, public_key.n_sq)

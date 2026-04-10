@@ -2,11 +2,12 @@
 
 Projekt demonstruje obliczenia statystyk medycznych na zaszyfrowanych danych z uzyciem kryptosystemu Pailliera.
 
-## Zakres wykonany (tygodnie 1-3)
+## Zakres wykonany (tygodnie 1-4)
 
 - Tydzien 1: setup repozytorium, struktura aplikacji, konwencje i dokumentacja startowa.
 - Tydzien 2: implementacja kluczy, szyfrowania, deszyfrowania, projekt bazy chorob i mapowania nazw.
 - Tydzien 3: operacje homomorficzne, zapytania po szyfrogramach, interfejs CLI i pierwsza integracja klient-serwer.
+- Tydzien 4: docelowa logika COUNT/SUM po stronie serwera chmurowego, rozszerzone testy jednostkowe i wizualizacja przeplywu w GUI.
 
 ## Architektura (symulacja klient-serwer)
 
@@ -34,7 +35,7 @@ Projekt demonstruje obliczenia statystyk medycznych na zaszyfrowanych danych z u
    paillier-tracker seed-demo
    ```
 
-4. Zliczanie choroby na serwerze (na szyfrogramach):
+4. Zliczanie choroby na serwerze (COUNT/SUM na szyfrogramach):
 
    ```bash
    paillier-tracker count --disease grypa --show-steps
@@ -60,5 +61,8 @@ Projekt demonstruje obliczenia statystyk medycznych na zaszyfrowanych danych z u
 
 Po uruchomieniu GUI zacznij od przycisku `Setup new` (nowa baza + nowe klucze)
 lub `Load existing` (istniejace pliki).
+
+W GUI dostepny jest panel wizualizacji procesu:
+`dane jawne -> szyfrogram -> wynik homomorficzny -> odszyfrowany wynik`.
 
 Szczegolowe opisy sa w katalogu docs.
