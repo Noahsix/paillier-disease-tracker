@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from .benchmarking import run_crypto_benchmark
 from .client import ClientApplication
 from .config import DEFAULT_DB_PATH, DEFAULT_DISEASES, DEFAULT_KEYS_PATH, DEFAULT_KEY_SIZE
 from .crypto import generate_keypair
@@ -36,16 +37,34 @@ def _default_diagnoses(disease_names: list[str], partial: dict[str, int]) -> dic
     return {name: int(partial.get(name, 0)) for name in disease_names}
 
 
+def _parse_key_sizes(raw: str) -> list[int]:
+    values = [item.strip() for item in raw.split(",") if item.strip()]
+    if not values:
+        raise ValueError("key-sizes cannot be empty")
+
+    key_sizes = [int(item) for item in values]
+    for key_size in key_sizes:
+        if key_size < 128:
+            raise ValueError("Every key size must be at least 128")
+
+    return key_sizes
+
+
 def command_setup(args: argparse.Namespace) -> int:
     public_key, private_key = generate_keypair(args.key_size)
     save_keypair(args.keys_path, public_key, private_key)
 
     app = ClientApplication(args.db_path, public_key, private_key)
     app.initialize_catalog(list(DEFAULT_DISEASES))
+    existing_patients = app.repository.total_patients()
+    if existing_patients:
+        app.repository.clear_patient_data()
 
     print("Setup complete")
     print(f"Database path: {args.db_path}")
     print(f"Keys path: {args.keys_path}")
+    if existing_patients:
+        print(f"Existing patient records cleared: {existing_patients}")
     print("Catalog diseases:", ", ".join(app.list_diseases()))
     return 0
 
@@ -73,6 +92,19 @@ def command_seed_demo(args: argparse.Namespace) -> int:
     app = _build_app(args.db_path, args.keys_path)
     added = app.seed_demo_data()
     print(f"Inserted demo patients: {added}")
+    return 0
+
+
+def command_seed_bulk(args: argparse.Namespace) -> int:
+    app = _build_app(args.db_path, args.keys_path)
+    inserted = app.seed_bulk_data(
+        patient_count=args.patients,
+        seed=args.seed,
+        pseudonym_prefix=args.prefix,
+        batch_size=args.batch_size,
+    )
+    print(f"Inserted bulk patients: {inserted}")
+    print(f"Total patients in DB: {app.repository.total_patients()}")
     return 0
 
 
@@ -125,6 +157,73 @@ def command_show_encrypted(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_validate(args: argparse.Namespace) -> int:
+    app = _build_app(args.db_path, args.keys_path)
+
+    if args.disease:
+        result = app.validate_disease_sum(args.disease)
+        print(f"Disease: {result.disease}")
+        print(f"Homomorphic SUM: {result.homomorphic_sum}")
+        print(f"Plain SUM reference: {result.plain_sum}")
+        print(f"Homomorphic COUNT: {result.homomorphic_count}")
+        print(f"Plain COUNT reference: {result.plain_count}")
+        print(f"Validation status: {result.is_valid}")
+        return 0 if result.is_valid else 1
+
+    report = app.validate_all_disease_sums()
+    print("Validation report (all diseases):")
+    for result in report.results:
+        print(
+            " | ".join(
+                [
+                    f"disease={result.disease}",
+                    f"homomorphic_sum={result.homomorphic_sum}",
+                    f"plain_sum={result.plain_sum}",
+                    f"status={result.is_valid}",
+                ]
+            )
+        )
+
+    print(
+        f"Summary: passed={report.passed_diseases}/{report.total_diseases}, all_valid={report.all_valid}"
+    )
+    return 0 if report.all_valid else 1
+
+
+def command_benchmark_crypto(args: argparse.Namespace) -> int:
+    key_sizes = _parse_key_sizes(args.key_sizes)
+
+    results = run_crypto_benchmark(
+        key_sizes=key_sizes,
+        encrypt_iterations=args.encrypt_iterations,
+        decrypt_iterations=args.decrypt_iterations,
+        homomorphic_iterations=args.homomorphic_iterations,
+        homomorphic_batch_size=args.homomorphic_batch_size,
+    )
+
+    for result in results:
+        print(f"Key size: {result.key_size} bits")
+        print(f"  Key generation: {result.keygen_seconds:.6f}s")
+        print(
+            f"  Encrypt avg ({result.encrypt_timing.iterations} runs): "
+            f"{result.encrypt_timing.average_ms:.3f}ms"
+        )
+        print(
+            f"  Decrypt avg ({result.decrypt_timing.iterations} runs): "
+            f"{result.decrypt_timing.average_ms:.3f}ms"
+        )
+        print(
+            f"  Homomorphic add_many avg ({result.homomorphic_add_timing.iterations} runs): "
+            f"{result.homomorphic_add_timing.average_ms:.3f}ms"
+        )
+        print(
+            f"  Homomorphic mul_const avg ({result.homomorphic_mul_timing.iterations} runs): "
+            f"{result.homomorphic_mul_timing.average_ms:.3f}ms"
+        )
+
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Paillier Disease Tracker CLI")
     parser.add_argument("--db-path", type=Path, default=DEFAULT_DB_PATH)
@@ -148,6 +247,16 @@ def build_parser() -> argparse.ArgumentParser:
     seed_parser = subparsers.add_parser("seed-demo", help="Insert deterministic demo data")
     seed_parser.set_defaults(handler=command_seed_demo)
 
+    bulk_parser = subparsers.add_parser(
+        "seed-bulk",
+        help="Insert large synthetic dataset for performance testing",
+    )
+    bulk_parser.add_argument("--patients", type=int, default=5000)
+    bulk_parser.add_argument("--seed", type=int, default=42)
+    bulk_parser.add_argument("--prefix", default="bulk_patient")
+    bulk_parser.add_argument("--batch-size", type=int, default=1000)
+    bulk_parser.set_defaults(handler=command_seed_bulk)
+
     count_parser = subparsers.add_parser(
         "count",
         help="Compute encrypted COUNT/SUM on server and decrypt result on client",
@@ -165,6 +274,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     show_parser.add_argument("--disease", required=True)
     show_parser.set_defaults(handler=command_show_encrypted)
+
+    validate_parser = subparsers.add_parser(
+        "validate",
+        help="Validate homomorphic results against plain SQL reference",
+    )
+    validate_parser.add_argument("--disease", required=False)
+    validate_parser.set_defaults(handler=command_validate)
+
+    benchmark_parser = subparsers.add_parser(
+        "benchmark-crypto",
+        help="Measure encryption/decryption/homomorphic operation timings for key sizes",
+    )
+    benchmark_parser.add_argument("--key-sizes", default="256,512,768")
+    benchmark_parser.add_argument("--encrypt-iterations", type=int, default=200)
+    benchmark_parser.add_argument("--decrypt-iterations", type=int, default=200)
+    benchmark_parser.add_argument("--homomorphic-iterations", type=int, default=100)
+    benchmark_parser.add_argument("--homomorphic-batch-size", type=int, default=64)
+    benchmark_parser.set_defaults(handler=command_benchmark_crypto)
 
     return parser
 

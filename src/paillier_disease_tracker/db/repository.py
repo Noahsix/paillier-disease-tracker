@@ -10,6 +10,59 @@ class DiseaseRepository:
     def __init__(self, db_path: PathLike):
         self.db_path = Path(db_path)
 
+    def _load_disease_ids(self, connection) -> dict[str, int]:
+        diseases = {
+            name: disease_id
+            for disease_id, name in connection.execute(
+                "SELECT id, name FROM diseases"
+            ).fetchall()
+        }
+
+        if not diseases:
+            raise RuntimeError("Disease catalog is empty. Run setup first.")
+
+        return diseases
+
+    def _validate_diagnoses(self, diagnoses: Mapping[str, int], diseases: Mapping[str, int]) -> None:
+        if not diagnoses:
+            raise ValueError("diagnoses cannot be empty")
+
+        unknown = sorted(set(diagnoses.keys()) - set(diseases.keys()))
+        if unknown:
+            raise ValueError(f"Unknown diseases: {', '.join(unknown)}")
+
+        for value in diagnoses.values():
+            if value not in (0, 1):
+                raise ValueError("Diagnosis value must be 0 or 1")
+
+    def _insert_patient(
+        self,
+        connection,
+        diseases: Mapping[str, int],
+        pseudonym: str,
+        diagnoses: Mapping[str, int],
+        encrypt_fn: Callable[[int], int],
+    ) -> int:
+        self._validate_diagnoses(diagnoses, diseases)
+
+        cursor = connection.execute(
+            "INSERT INTO patients(pseudonym) VALUES (?)",
+            (pseudonym,),
+        )
+        patient_id = int(cursor.lastrowid)
+
+        for disease_name, value in diagnoses.items():
+            encrypted_flag = encrypt_fn(value)
+            connection.execute(
+                """
+                INSERT INTO diagnoses(patient_id, disease_id, has_disease, encrypted_flag)
+                VALUES (?, ?, ?, ?)
+                """,
+                (patient_id, diseases[disease_name], int(value), str(encrypted_flag)),
+            )
+
+        return patient_id
+
     def initialize_catalog(self, disease_names: list[str]) -> None:
         initialize_database(self.db_path)
         with connect(self.db_path) as connection:
@@ -29,44 +82,25 @@ class DiseaseRepository:
         diagnoses: Mapping[str, int],
         encrypt_fn: Callable[[int], int],
     ) -> int:
-        if not diagnoses:
-            raise ValueError("diagnoses cannot be empty")
+        with connect(self.db_path) as connection:
+            diseases = self._load_disease_ids(connection)
+            return self._insert_patient(connection, diseases, pseudonym, diagnoses, encrypt_fn)
+
+    def add_patients_bulk(
+        self,
+        records: list[tuple[str, Mapping[str, int]]],
+        encrypt_fn: Callable[[int], int],
+    ) -> int:
+        if not records:
+            return 0
 
         with connect(self.db_path) as connection:
-            diseases = {
-                name: disease_id
-                for disease_id, name in connection.execute(
-                    "SELECT id, name FROM diseases"
-                ).fetchall()
-            }
-
-            if not diseases:
-                raise RuntimeError("Disease catalog is empty. Run setup first.")
-
-            unknown = sorted(set(diagnoses.keys()) - set(diseases.keys()))
-            if unknown:
-                raise ValueError(f"Unknown diseases: {', '.join(unknown)}")
-
-            cursor = connection.execute(
-                "INSERT INTO patients(pseudonym) VALUES (?)",
-                (pseudonym,),
-            )
-            patient_id = int(cursor.lastrowid)
-
-            for disease_name, value in diagnoses.items():
-                if value not in (0, 1):
-                    raise ValueError("Diagnosis value must be 0 or 1")
-
-                encrypted_flag = encrypt_fn(value)
-                connection.execute(
-                    """
-                    INSERT INTO diagnoses(patient_id, disease_id, has_disease, encrypted_flag)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (patient_id, diseases[disease_name], int(value), str(encrypted_flag)),
-                )
-
-            return patient_id
+            diseases = self._load_disease_ids(connection)
+            inserted = 0
+            for pseudonym, diagnoses in records:
+                self._insert_patient(connection, diseases, pseudonym, diagnoses, encrypt_fn)
+                inserted += 1
+            return inserted
 
     def list_diseases(self) -> list[str]:
         with connect(self.db_path) as connection:
@@ -152,3 +186,8 @@ class DiseaseRepository:
         with connect(self.db_path) as connection:
             row = connection.execute("SELECT COUNT(*) FROM patients").fetchone()
             return int(row[0]) if row else 0
+
+    def clear_patient_data(self) -> None:
+        with connect(self.db_path) as connection:
+            connection.execute("DELETE FROM diagnoses")
+            connection.execute("DELETE FROM patients")

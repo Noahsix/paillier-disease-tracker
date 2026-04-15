@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from random import Random
 
 from ..config import DEFAULT_DISEASES
 from ..crypto import PrivateKey, PublicKey, decrypt, encrypt, generate_keypair
@@ -44,6 +45,24 @@ class DiseaseCountFlow:
     encrypted_homomorphic_result: int
     decrypted_result: int
     plain_reference: int
+
+
+@dataclass
+class DiseaseValidationResult:
+    disease: str
+    homomorphic_sum: int
+    plain_sum: int
+    homomorphic_count: int
+    plain_count: int
+    is_valid: bool
+
+
+@dataclass
+class ValidationReport:
+    results: list[DiseaseValidationResult]
+    total_diseases: int
+    passed_diseases: int
+    all_valid: bool
 
 
 class ClientApplication:
@@ -91,6 +110,43 @@ class ClientApplication:
             added += 1
         return added
 
+    def seed_bulk_data(
+        self,
+        patient_count: int,
+        seed: int = 42,
+        pseudonym_prefix: str = "bulk_patient",
+        batch_size: int = 1000,
+    ) -> int:
+        if patient_count < 0:
+            raise ValueError("patient_count cannot be negative")
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
+        if patient_count == 0:
+            return 0
+
+        disease_names = self.list_diseases()
+        if not disease_names:
+            raise RuntimeError("Disease catalog is empty. Run setup first.")
+
+        randomizer = Random(seed)
+        offset = self.repository.total_patients()
+        inserted = 0
+
+        while inserted < patient_count:
+            current_batch_size = min(batch_size, patient_count - inserted)
+            records: list[tuple[str, dict[str, int]]] = []
+
+            for index in range(current_batch_size):
+                absolute_index = offset + inserted + index + 1
+                pseudonym = f"{pseudonym_prefix}_{absolute_index:08d}"
+                diagnoses = {name: randomizer.randint(0, 1) for name in disease_names}
+                records.append((pseudonym, diagnoses))
+
+            self.repository.add_patients_bulk(records, self.encrypt_value)
+            inserted += current_batch_size
+
+        return inserted
+
     def count_disease(self, disease_name: str) -> CountResult:
         count_sum = self.count_and_sum_disease(disease_name)
         return CountResult(
@@ -107,7 +163,7 @@ class ClientApplication:
         decrypted_sum = self.decrypt_value(encrypted_count_sum.encrypted_sum)
 
         plain_sum_reference = self.repository.get_plain_sum_for_disease(disease_name)
-        plain_count_reference = plain_sum_reference
+        plain_count_reference = self.repository.get_plain_count_for_disease(disease_name)
 
         return CountSumResult(
             disease=disease_name,
@@ -143,3 +199,32 @@ class ClientApplication:
 
     def list_diseases(self) -> list[str]:
         return self.repository.list_diseases()
+
+    def validate_disease_sum(self, disease_name: str) -> DiseaseValidationResult:
+        count_sum = self.count_and_sum_disease(disease_name)
+        is_valid = (
+            count_sum.decrypted_sum == count_sum.plain_sum_reference
+            and count_sum.decrypted_count == count_sum.plain_count_reference
+        )
+
+        return DiseaseValidationResult(
+            disease=disease_name,
+            homomorphic_sum=count_sum.decrypted_sum,
+            plain_sum=count_sum.plain_sum_reference,
+            homomorphic_count=count_sum.decrypted_count,
+            plain_count=count_sum.plain_count_reference,
+            is_valid=is_valid,
+        )
+
+    def validate_all_disease_sums(self) -> ValidationReport:
+        disease_names = self.list_diseases()
+        results = [self.validate_disease_sum(name) for name in disease_names]
+        passed_diseases = sum(1 for result in results if result.is_valid)
+        total_diseases = len(results)
+
+        return ValidationReport(
+            results=results,
+            total_diseases=total_diseases,
+            passed_diseases=passed_diseases,
+            all_valid=passed_diseases == total_diseases,
+        )
