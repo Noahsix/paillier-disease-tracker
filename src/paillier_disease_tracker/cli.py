@@ -161,6 +161,8 @@ def command_validate(args: argparse.Namespace) -> int:
     app = _build_app(args.db_path, args.keys_path)
 
     if args.disease:
+        if args.disease not in app.list_diseases():
+            raise ValueError(f"Unknown disease: {args.disease}")
         result = app.validate_disease_sum(args.disease)
         print(f"Disease: {result.disease}")
         print(f"Homomorphic SUM: {result.homomorphic_sum}")

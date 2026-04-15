@@ -160,6 +160,20 @@ def test_validate_detects_mismatch_after_plain_value_tampering(tmp_path) -> None
     assert any(not result.is_valid for result in report.results)
 
 
+def test_count_and_validate_reject_unknown_disease(tmp_path) -> None:
+    db_path = tmp_path / "tracker.db"
+    public_key, private_key = generate_keypair(128)
+
+    app = ClientApplication(db_path, public_key, private_key)
+    app.initialize_catalog(["grypa", "covid19"])
+
+    with pytest.raises(ValueError, match="Unknown disease"):
+        app.count_and_sum_disease("nieistniejaca")
+
+    with pytest.raises(ValueError, match="Unknown disease"):
+        app.validate_disease_sum("nieistniejaca")
+
+
 def test_setup_clears_old_ciphertexts_before_key_rotation(tmp_path) -> None:
     db_path = tmp_path / "tracker.db"
     keys_path = tmp_path / "keys.json"

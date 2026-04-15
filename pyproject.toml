@@ -9,7 +9,7 @@ description = "Privacy-preserving medical statistics using the Paillier cryptosy
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Team Project" }]
-dependencies = []
+dependencies = ["ttkbootstrap>=1.10.1"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]

@@ -92,6 +92,10 @@ class ClientApplication:
     def initialize_catalog(self, disease_names: list[str] | None = None) -> None:
         self.repository.initialize_catalog(disease_names or list(DEFAULT_DISEASES))
 
+    def _ensure_known_disease(self, disease_name: str) -> None:
+        if disease_name not in self.list_diseases():
+            raise ValueError(f"Unknown disease: {disease_name}")
+
     def encrypt_value(self, value: int) -> int:
         return encrypt(self.public_key, value)
 
@@ -157,6 +161,7 @@ class ClientApplication:
         )
 
     def count_and_sum_disease(self, disease_name: str) -> CountSumResult:
+        self._ensure_known_disease(disease_name)
         encrypted_count_sum = self.server.encrypted_count_sum_for_disease(disease_name)
 
         decrypted_count = self.decrypt_value(encrypted_count_sum.encrypted_count)
@@ -177,6 +182,7 @@ class ClientApplication:
         )
 
     def build_count_flow(self, disease_name: str) -> DiseaseCountFlow:
+        self._ensure_known_disease(disease_name)
         count_sum = self.count_and_sum_disease(disease_name)
         rows = [
             FlowRow(
@@ -201,6 +207,7 @@ class ClientApplication:
         return self.repository.list_diseases()
 
     def validate_disease_sum(self, disease_name: str) -> DiseaseValidationResult:
+        self._ensure_known_disease(disease_name)
         count_sum = self.count_and_sum_disease(disease_name)
         is_valid = (
             count_sum.decrypted_sum == count_sum.plain_sum_reference

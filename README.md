@@ -2,13 +2,14 @@
 
 Projekt demonstruje obliczenia statystyk medycznych na zaszyfrowanych danych z uzyciem kryptosystemu Pailliera.
 
-## Zakres wykonany (tygodnie 1-5)
+## Zakres wykonany (tygodnie 1-6)
 
 - Tydzien 1: setup repozytorium, struktura aplikacji, konwencje i dokumentacja startowa.
 - Tydzien 2: implementacja kluczy, szyfrowania, deszyfrowania, projekt bazy chorob i mapowania nazw.
 - Tydzien 3: operacje homomorficzne, zapytania po szyfrogramach, interfejs CLI i pierwsza integracja klient-serwer.
 - Tydzien 4: docelowa logika COUNT/SUM po stronie serwera chmurowego, rozszerzone testy jednostkowe i wizualizacja przeplywu w GUI.
 - Tydzien 5: benchmarki czasu szyfrowania/deszyfrowania/homomorfii dla wielu dlugosci klucza, hurtowe seedowanie tysiecy rekordow oraz automatyczna walidacja wynikow homomorficznych.
+- Tydzien 6: formalne scenariusze testowe (6/6), bugfixing i cleanup oraz mocna rozbudowa GUI (walidacja, seed-bulk, benchmarki, lepszy podglad pipeline).
 
 ## Architektura (symulacja klient-serwer)
 
@@ -87,7 +88,38 @@ lub `Load existing` (istniejace pliki).
 W GUI dostepny jest panel wizualizacji procesu:
 `dane jawne -> szyfrogram -> wynik homomorficzny -> odszyfrowany wynik`.
 
+GUI obejmuje takze funkcje tygodnia 5/6:
+
+- seed-bulk z parametrami wolumenu,
+- walidacja pojedynczej choroby i wszystkich chorob,
+- benchmark kryptografii dla wielu dlugosci klucza,
+- eksport raportu benchmarku do Markdown.
+
+GUI jest zbudowane na `ttkbootstrap` (nowoczesny framework UI dla Tkinter),
+z obsluga dynamicznej zmiany motywu bez restartu aplikacji.
+
 Szczegolowe opisy sa w katalogu docs.
+
+## Instrukcja poprawnej obslugi GUI (walidacja)
+
+Stosuj zawsze jedna spojna pare plikow: DB + keys.
+
+1. Ustaw pola `DB path` i `Keys path` w zakladce Projekt.
+2. Wybierz jeden tryb startu:
+   - nowy projekt: kliknij `Setup new` (generuje nowe klucze; jesli sa stare rekordy pacjentow, zostana wyczyszczone),
+   - istniejacy projekt: kliknij `Load existing` (ladujesz istniejace klucze i baze bez rotacji kluczy).
+3. Dodaj dane (`Seed demo`, `Run seed-bulk` albo reczne `Add patient`).
+4. Przejdz do zakladki Analityka i walidacja.
+5. Wybierz chorobe i kliknij `Count encrypted`, a nastepnie `Validate selected` lub `Validate all`.
+6. Odczytaj status w kafelku `Validation` i w tabeli `Validation report`.
+
+Najczestsze powody niepowodzenia walidacji w GUI:
+
+- mieszanie kluczy i danych z roznych projektow (inny `keys.json` niz ten, ktory szyfrowal rekordy),
+- przypadkowa rotacja kluczy przez `Setup new` po dodaniu danych (stare rekordy sa wtedy czyszczone),
+- walidacja na pustej bazie po setupie (wyniki 0 sa poprawne, ale nie odzwierciedlaja danych, bo ich nie ma).
+
+Wskazowka: po zmianie `DB path` lub `Keys path` aplikacja automatycznie przeladuje kontekst przy kolejnej operacji.
 
 ## Instrukcja poprawnej obslugi (setup, dane, walidacja)
 
