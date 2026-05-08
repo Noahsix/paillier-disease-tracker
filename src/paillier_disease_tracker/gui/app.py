@@ -8,7 +8,7 @@ from tkinter import messagebox
 import ttkbootstrap as ttk
 
 from ..benchmarking import KeySizeBenchmarkResult, run_crypto_benchmark
-from ..client import ClientApplication, DiseaseCountFlow, ValidationReport
+from ..client import ClientApplication, DbPreview, DiseaseCountFlow, ValidationReport
 from ..config import DEFAULT_DB_PATH, DEFAULT_DISEASES, DEFAULT_KEY_SIZE, DEFAULT_KEYS_PATH
 from ..crypto import generate_keypair
 from ..keys import load_keypair, save_keypair
@@ -55,6 +55,10 @@ class TrackerGUI:
         self.benchmark_report_path_var = tk.StringVar(
             value="docs/08_tydzien_6_dane_wydajnosciowe.md"
         )
+        self.preview_limit_var = tk.StringVar(value="50")
+        self.preview_total_patients_var = tk.StringVar(value="Total patients: -")
+        self.preview_total_diagnoses_var = tk.StringVar(value="Total diagnoses: -")
+        self.preview_total_diseases_var = tk.StringVar(value="Diseases: -")
 
         self._configure_styles()
         self._build_layout()
@@ -164,18 +168,21 @@ class TrackerGUI:
         self.patients_tab = ttk.Frame(self.main_notebook, style="App.TFrame", padding=8)
         self.analytics_tab = ttk.Frame(self.main_notebook, style="App.TFrame", padding=8)
         self.performance_tab = ttk.Frame(self.main_notebook, style="App.TFrame", padding=8)
+        self.preview_tab = ttk.Frame(self.main_notebook, style="App.TFrame", padding=8)
         self.log_tab = ttk.Frame(self.main_notebook, style="App.TFrame", padding=8)
 
         self.main_notebook.add(self.project_tab, text="Projekt")
         self.main_notebook.add(self.patients_tab, text="Pacjenci i dane")
         self.main_notebook.add(self.analytics_tab, text="Analityka i walidacja")
         self.main_notebook.add(self.performance_tab, text="Benchmarki")
+        self.main_notebook.add(self.preview_tab, text="Podglad bazy")
         self.main_notebook.add(self.log_tab, text="Log")
 
         self._build_project_tab()
         self._build_patients_tab()
         self._build_analytics_tab()
         self._build_performance_tab()
+        self._build_preview_tab()
         self._build_log_tab()
 
         status_bar = ttk.Label(container, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
@@ -653,6 +660,65 @@ class TrackerGUI:
             pady=(8, 0),
         )
 
+    def _build_preview_tab(self) -> None:
+        control_frame = ttk.Labelframe(
+            self.preview_tab,
+            text="Podglad bazy danych",
+            padding=12,
+            style="Card.TLabelframe",
+            bootstyle="primary",
+        )
+        control_frame.pack(fill=tk.X)
+
+        ttk.Label(control_frame, text="Limit rows").grid(row=0, column=0, sticky=tk.W)
+        ttk.Entry(control_frame, textvariable=self.preview_limit_var, width=10).grid(
+            row=0,
+            column=1,
+            sticky=tk.W,
+            padx=6,
+        )
+        ttk.Button(
+            control_frame,
+            text="Refresh preview",
+            command=self.on_refresh_preview,
+            style="Accent.TButton",
+            bootstyle="primary",
+        ).grid(row=0, column=2, padx=6)
+
+        summary_frame = ttk.Frame(self.preview_tab, style="App.TFrame")
+        summary_frame.pack(fill=tk.X, pady=(10, 0))
+        ttk.Label(summary_frame, textvariable=self.preview_total_patients_var, style="Summary.TLabel").grid(
+            row=0,
+            column=0,
+            sticky="ew",
+            padx=4,
+        )
+        ttk.Label(
+            summary_frame,
+            textvariable=self.preview_total_diagnoses_var,
+            style="Summary.TLabel",
+        ).grid(row=0, column=1, sticky="ew", padx=4)
+        ttk.Label(
+            summary_frame,
+            textvariable=self.preview_total_diseases_var,
+            style="Summary.TLabel",
+        ).grid(row=0, column=2, sticky="ew", padx=4)
+
+        for index in range(3):
+            summary_frame.grid_columnconfigure(index, weight=1)
+
+        table_frame = ttk.Frame(self.preview_tab, style="App.TFrame")
+        table_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
+
+        self.preview_tree = ttk.Treeview(table_frame, show="headings", height=18)
+        self.preview_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        scrollbar_y = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.preview_tree.yview)
+        scrollbar_y.pack(side=tk.RIGHT, fill=tk.Y)
+        scrollbar_x = ttk.Scrollbar(table_frame, orient=tk.HORIZONTAL, command=self.preview_tree.xview)
+        scrollbar_x.pack(side=tk.BOTTOM, fill=tk.X)
+        self.preview_tree.configure(yscrollcommand=scrollbar_y.set, xscrollcommand=scrollbar_x.set)
+
     def _log(self, message: str) -> None:
         self.log_widget.insert(tk.END, f"{message}\n")
         self.log_widget.see(tk.END)
@@ -728,6 +794,31 @@ class TrackerGUI:
                     "PASS" if result.is_valid else "FAIL",
                 ),
             )
+
+    def _render_db_preview(self, preview: DbPreview) -> None:
+        for item_id in self.preview_tree.get_children():
+            self.preview_tree.delete(item_id)
+
+        columns = ["pseudonym"] + list(preview.diseases)
+        self.preview_tree.configure(columns=columns)
+
+        self.preview_tree.heading("pseudonym", text="Pseudonym")
+        self.preview_tree.column("pseudonym", width=220, anchor=tk.W)
+        for disease_name in preview.diseases:
+            self.preview_tree.heading(disease_name, text=disease_name)
+            self.preview_tree.column(disease_name, width=120, anchor=tk.CENTER)
+
+        self.preview_total_patients_var.set(f"Total patients: {preview.total_patients}")
+        self.preview_total_diagnoses_var.set(f"Total diagnoses: {preview.total_diagnoses}")
+        self.preview_total_diseases_var.set(f"Diseases: {len(preview.diseases)}")
+
+        if not preview.rows:
+            self.preview_tree.insert("", tk.END, values=("<brak rekordow>",))
+            return
+
+        for row in preview.rows:
+            values = [row.pseudonym] + [row.diagnoses.get(name, 0) for name in preview.diseases]
+            self.preview_tree.insert("", tk.END, values=values)
 
     def _render_pipeline_timeline(self, disease_name: str, flow: DiseaseCountFlow) -> None:
         lines = [
@@ -850,10 +941,10 @@ class TrackerGUI:
             save_keypair(keys_path, public_key, private_key)
 
             app = ClientApplication(db_path=db_path, public_key=public_key, private_key=private_key)
-            app.initialize_catalog(list(DEFAULT_DISEASES))
             existing_patients = app.repository.total_patients()
             if existing_patients:
                 app.repository.clear_patient_data()
+            app.repository.reset_catalog(list(DEFAULT_DISEASES))
 
             self.app = app
             self.loaded_db_path = db_path
@@ -1219,6 +1310,20 @@ class TrackerGUI:
     def on_clear_log(self) -> None:
         self.log_widget.delete("1.0", tk.END)
         self._set_status("Log cleared")
+
+    def on_refresh_preview(self) -> None:
+        try:
+            self._set_status("Loading database preview...")
+            app = self._create_or_load_app()
+            limit = self._parse_positive_int(self.preview_limit_var.get(), "Preview limit")
+            preview = app.build_db_preview(limit=limit)
+            self._render_db_preview(preview)
+            self._log(f"Database preview refreshed (rows_limit={limit})")
+            self._set_status("Database preview ready")
+        except Exception as error:
+            self._log(f"ERROR db-preview: {error}")
+            messagebox.showerror("Database preview error", str(error))
+            self._set_status("Database preview failed")
 
 
 def main() -> int:

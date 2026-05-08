@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Paillier Disease Tracker Web</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <div class="glow"></div>
+  <header class="hero">
+    <div class="hero-top">
+      <div class="brand">
+        <div class="brand-mark">PDT</div>
+        <div>
+          <div class="brand-title">Paillier Disease Tracker</div>
+          <div class="brand-subtitle">Web control room for homomorphic analytics</div>
+        </div>
+      </div>
+      <nav class="hero-nav">
+        <a href="#project">Project</a>
+        <a href="#patients">Patients</a>
+        <a href="#analytics">Analytics</a>
+        <a href="#database">Database</a>
+        <a href="#validation">Validation</a>
+        <a href="#log">Log</a>
+      </nav>
+    </div>
+    <div class="hero-panel" data-reveal>
+      <div>
+        <h1>Encrypted clinical stats, instant visibility.</h1>
+        <p>
+          Run the full Paillier workflow in a browser: setup keys, seed patients, compute
+          encrypted counts and sums, validate results, and benchmark crypto performance.
+        </p>
+      </div>
+      <div class="hero-metrics">
+        <div class="metric-card">
+          <div class="metric-label">Status</div>
+          <div class="metric-value" id="statusText">Idle</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Loaded DB</div>
+          <div class="metric-value" id="statusDb">-</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Loaded Keys</div>
+          <div class="metric-value" id="statusKeys">-</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Last action</div>
+          <div class="metric-value" id="statusLastAction">-</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section id="project" class="section" data-reveal>
+      <div class="section-header">
+        <h2>Project setup</h2>
+        <p>Generate keys, bind a database, and load existing workspaces.</p>
+      </div>
+      <div class="grid two">
+        <div class="card">
+          <div class="card-title">Paths and keys</div>
+          <label>Database path
+            <input id="dbPath" type="text" />
+          </label>
+          <label>Keys path
+            <input id="keysPath" type="text" />
+          </label>
+          <label>Key size (bits)
+            <input id="keySize" type="number" min="128" />
+          </label>
+          <div class="button-row">
+            <button id="setupBtn" class="primary">Setup new</button>
+            <button id="loadBtn">Load existing</button>
+            <button id="listDiseasesBtn" class="ghost">List diseases</button>
+          </div>
+          <div class="note">Use one consistent DB + keys pair for all actions.</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Disease mapping</div>
+          <div class="add-disease">
+            <label>New disease name
+              <input id="newDiseaseName" type="text" placeholder="e.g. borelioza" />
+            </label>
+            <button id="addDiseaseBtn" class="primary">Add disease</button>
+          </div>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Disease</th>
+                </tr>
+              </thead>
+              <tbody id="mappingTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="patients" class="section" data-reveal>
+      <div class="section-header">
+        <h2>Patients and data</h2>
+        <p>Add individual patients or seed demo and bulk datasets.</p>
+      </div>
+      <div class="grid two">
+        <div class="card">
+          <div class="card-title">Add patient</div>
+          <label>Pseudonym
+            <input id="patientName" type="text" placeholder="patient_0001" />
+          </label>
+          <div id="diagnosesContainer" class="chip-grid"></div>
+          <div class="button-row">
+            <button id="addPatientBtn" class="primary">Add patient</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Seed data</div>
+          <div class="seed-grid">
+            <label>Bulk patients
+              <input id="bulkPatients" type="number" min="0" />
+            </label>
+            <label>Seed
+              <input id="bulkSeed" type="number" />
+            </label>
+            <label>Prefix
+              <input id="bulkPrefix" type="text" />
+            </label>
+            <label>Batch size
+              <input id="bulkBatchSize" type="number" min="1" />
+            </label>
+          </div>
+          <div class="button-row">
+            <button id="seedDemoBtn" class="ghost">Seed demo</button>
+            <button id="seedBulkBtn" class="primary">Run seed-bulk</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="analytics" class="section" data-reveal>
+      <div class="section-header">
+        <h2>Encrypted analytics</h2>
+        <p>Run count and sum on ciphertexts and inspect flow details.</p>
+      </div>
+      <div class="card">
+        <div class="analytics-controls">
+          <label>Selected disease
+            <select id="diseaseSelect"></select>
+          </label>
+          <div class="button-row">
+            <button id="countBtn" class="primary">Count encrypted</button>
+            <button id="countFlowBtn">Count + flow</button>
+            <button id="encryptedRowsBtn" class="ghost">Show encrypted rows</button>
+          </div>
+        </div>
+        <div class="summary-row">
+          <div class="summary-card">
+            <div class="summary-label">Rows</div>
+            <div id="summaryRows" class="summary-value">-</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">Encrypted sum</div>
+            <div id="summaryEncrypted" class="summary-value scroll-x">-</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">Decrypted sum</div>
+            <div id="summaryDecrypted" class="summary-value">-</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">Plain reference</div>
+            <div id="summaryPlain" class="summary-value">-</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">Validation</div>
+            <div id="summaryValidation" class="summary-value">-</div>
+          </div>
+        </div>
+        <div class="grid two">
+          <div class="card nested">
+            <div class="card-title">Flow rows</div>
+            <div class="table-wrapper tall">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Pseudonym</th>
+                    <th>Plain</th>
+                    <th>Ciphertext</th>
+                  </tr>
+                </thead>
+                <tbody id="flowTable"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card nested">
+            <div class="card-title">Pipeline timeline</div>
+            <pre id="pipelineText" class="pipeline">-</pre>
+            <div class="card-title">Encrypted rows</div>
+            <div class="table-wrapper tall">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Pseudonym</th>
+                    <th>Ciphertext</th>
+                  </tr>
+                </thead>
+                <tbody id="encryptedRowsTable"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="validation" class="section" data-reveal>
+      <div class="section-header">
+        <h2>Validation</h2>
+        <p>Compare decrypted homomorphic results with plain SQL reference.</p>
+      </div>
+      <div class="card">
+        <div class="button-row">
+          <button id="validateSelectedBtn" class="primary">Validate selected</button>
+          <button id="validateAllBtn">Validate all</button>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Disease</th>
+                <th>Homomorphic sum</th>
+                <th>Plain sum</th>
+                <th>Homomorphic count</th>
+                <th>Plain count</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="validationTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="database" class="section" data-reveal>
+      <div class="section-header">
+        <h2>Database preview</h2>
+        <p>Quick look at patient rows and their 0/1 diagnoses.</p>
+      </div>
+      <div class="card">
+        <div class="analytics-controls">
+          <label>Rows limit
+            <input id="dbPreviewLimit" type="number" min="1" value="50" />
+          </label>
+          <div class="button-row">
+            <button id="dbPreviewBtn" class="primary">Refresh preview</button>
+          </div>
+        </div>
+        <div class="summary-row">
+          <div class="summary-card">
+            <div class="summary-label">Total patients</div>
+            <div id="dbPreviewTotalPatients" class="summary-value">-</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">Total diagnoses</div>
+            <div id="dbPreviewTotalDiagnoses" class="summary-value">-</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">Diseases</div>
+            <div id="dbPreviewTotalDiseases" class="summary-value">-</div>
+          </div>
+        </div>
+        <div class="table-wrapper tall">
+          <table>
+            <thead id="dbPreviewHead"></thead>
+            <tbody id="dbPreviewTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="log" class="section" data-reveal>
+      <div class="section-header">
+        <h2>Operations log</h2>
+        <p>Client-side log of actions and responses.</p>
+      </div>
+      <div class="card">
+        <div class="button-row">
+          <button id="clearLogBtn" class="ghost">Clear log</button>
+        </div>
+        <pre id="logOutput" class="log"></pre>
+      </div>
+    </section>
+  </main>
+
+  <div id="busyOverlay" class="busy-overlay" aria-hidden="true">
+    <div class="busy-card" role="status" aria-live="polite">
+      <div class="spinner"></div>
+      <div class="busy-title" id="busyTitle">Working</div>
+      <div class="busy-detail" id="busyDetail">Processing request...</div>
+      <div class="busy-timer" id="busyTimer">0.0s</div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div>Paillier Disease Tracker Web</div>
+    <div>Local mode · offline friendly</div>
+  </footer>
+</body>
+</html>

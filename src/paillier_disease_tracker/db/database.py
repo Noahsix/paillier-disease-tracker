@@ -34,8 +34,10 @@ CREATE TABLE IF NOT EXISTS diagnoses (
 def connect(db_path: PathLike) -> sqlite3.Connection:
     db_file = Path(db_path)
     db_file.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(db_file)
+    connection = sqlite3.connect(db_file, timeout=10)
     connection.execute("PRAGMA foreign_keys = ON;")
+    connection.execute("PRAGMA journal_mode = WAL;")
+    connection.execute("PRAGMA busy_timeout = 5000;")
     return connection
 
 

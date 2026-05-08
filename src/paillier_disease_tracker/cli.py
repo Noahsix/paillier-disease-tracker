@@ -55,10 +55,10 @@ def command_setup(args: argparse.Namespace) -> int:
     save_keypair(args.keys_path, public_key, private_key)
 
     app = ClientApplication(args.db_path, public_key, private_key)
-    app.initialize_catalog(list(DEFAULT_DISEASES))
     existing_patients = app.repository.total_patients()
     if existing_patients:
         app.repository.clear_patient_data()
+    app.repository.reset_catalog(list(DEFAULT_DISEASES))
 
     print("Setup complete")
     print(f"Database path: {args.db_path}")

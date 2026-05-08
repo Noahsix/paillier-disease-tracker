@@ -4,6 +4,8 @@ from .workflow import (
     CountSumResult,
     DiseaseValidationResult,
     DiseaseCountFlow,
+    DbPreview,
+    DbPreviewRow,
     FlowRow,
     ValidationReport,
 )
@@ -14,6 +16,8 @@ __all__ = [
     "CountSumResult",
     "DiseaseValidationResult",
     "DiseaseCountFlow",
+    "DbPreview",
+    "DbPreviewRow",
     "FlowRow",
     "ValidationReport",
 ]

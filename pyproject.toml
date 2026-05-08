@@ -9,20 +9,29 @@ description = "Privacy-preserving medical statistics using the Paillier cryptosy
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Team Project" }]
-dependencies = ["ttkbootstrap>=1.10.1"]
+dependencies = [
+	"fastapi>=0.110.0",
+	"ttkbootstrap>=1.10.1",
+	"uvicorn>=0.29.0",
+]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pyinstaller>=6.0", "pytest>=8.0"]
 
 [project.scripts]
 paillier-tracker = "paillier_disease_tracker.cli:main"
 paillier-tracker-gui = "paillier_disease_tracker.gui.app:main"
+paillier-tracker-web = "paillier_disease_tracker.web.main:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"paillier_disease_tracker.web" = ["static/*.html", "static/*.css", "static/*.js"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

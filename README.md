@@ -98,6 +98,31 @@ GUI obejmuje takze funkcje tygodnia 5/6:
 GUI jest zbudowane na `ttkbootstrap` (nowoczesny framework UI dla Tkinter),
 z obsluga dynamicznej zmiany motywu bez restartu aplikacji.
 
+## Wersja web (launcher + przegladarka)
+
+1. Start serwera web (localhost + auto-otwarcie przegladarki):
+
+   ```bash
+   paillier-tracker-web
+   ```
+
+   Opcje:
+
+   ```bash
+   paillier-tracker-web --host 0.0.0.0 --port 8000
+   paillier-tracker-web --no-browser
+   paillier-tracker-web --no-auto-port
+   ```
+
+2. Budowa pliku .exe (Windows, bez wymagania Pythona u odbiorcy):
+
+   ```bash
+   pip install -e .[dev]
+   .\scripts\build_web_exe.ps1
+   ```
+
+   Gotowy launcher znajdziesz w `dist/paillier-disease-tracker-web.exe`.
+
 Szczegolowe opisy sa w katalogu docs.
 
 ## Instrukcja poprawnej obslugi GUI (walidacja)

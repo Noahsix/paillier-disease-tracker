@@ -65,6 +65,20 @@ class ValidationReport:
     all_valid: bool
 
 
+@dataclass
+class DbPreviewRow:
+    pseudonym: str
+    diagnoses: dict[str, int]
+
+
+@dataclass
+class DbPreview:
+    diseases: list[str]
+    rows: list[DbPreviewRow]
+    total_patients: int
+    total_diagnoses: int
+
+
 class ClientApplication:
     def __init__(
         self,
@@ -206,6 +220,9 @@ class ClientApplication:
     def list_diseases(self) -> list[str]:
         return self.repository.list_diseases()
 
+    def add_disease(self, disease_name: str) -> None:
+        self.repository.add_disease(disease_name, self.encrypt_value)
+
     def validate_disease_sum(self, disease_name: str) -> DiseaseValidationResult:
         self._ensure_known_disease(disease_name)
         count_sum = self.count_and_sum_disease(disease_name)
@@ -234,4 +251,19 @@ class ClientApplication:
             total_diseases=total_diseases,
             passed_diseases=passed_diseases,
             all_valid=passed_diseases == total_diseases,
+        )
+
+    def build_db_preview(self, limit: int = 50) -> DbPreview:
+        diseases, rows, total_patients, total_diagnoses = self.repository.get_db_preview(
+            limit=limit
+        )
+        preview_rows = [
+            DbPreviewRow(pseudonym=pseudonym, diagnoses=diagnoses)
+            for pseudonym, diagnoses in rows
+        ]
+        return DbPreview(
+            diseases=diseases,
+            rows=preview_rows,
+            total_patients=total_patients,
+            total_diagnoses=total_diagnoses,
         )
